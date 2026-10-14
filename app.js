@@ -8,7 +8,7 @@
 import { convertFiles } from "./pdf.js";
 import { buildDocx } from "./docx.js";
 import { renderPagesToBlobs, packZip } from "./export.js";
-import { openInNativeViewer, GUIDE_TEXT } from "./native.js";
+import { openInNativeViewer } from "./native.js";
 
 const $ = (s) => document.querySelector(s);
 const PW = 21, PH = 29.7;                 // A4（厘米）
@@ -227,41 +227,21 @@ function renderLibrary() {
     sub.append(badge, rm);
     meta.append(name, sub);
 
-    // 文字层不可读的票（铁路电子客票等）：引导到本机版处理
-    if (it.needsNative && it.srcBlob) {
+    // 票面文字渲染不全时，提示可切换到本机版（仅一次点击，不打断流程）
+    if (it.needsNative) {
       const warn = document.createElement("div");
       warn.className = "native-hint";
-      const txt = document.createElement("div");
+      const txt = document.createElement("span");
       txt.className = "native-text";
-      const t1 = document.createElement("strong");
-      t1.textContent = "⚠ 高铁票：本机版可完整显示";
-      const t2 = document.createElement("span");
-      t2.textContent = "网页版无法渲染票面文字，请用本机版处理此票";
-      txt.append(t1, t2);
-
-      const btns = document.createElement("div");
-      btns.className = "native-btns";
-
-      const btn1 = document.createElement("button");
-      btn1.className = "btn tiny native-btn";
-      btn1.textContent = "看怎么用";
-      btn1.title = GUIDE_TEXT.reason;
-      btn1.onclick = (e) => {
+      txt.textContent = "站名等汉字需本机版显示";
+      const btn = document.createElement("button");
+      btn.className = "btn tiny native-btn";
+      btn.textContent = "本机版说明";
+      btn.onclick = (e) => {
         e.stopPropagation();
         showGuide();
       };
-
-      const btn2 = document.createElement("button");
-      btn2.className = "btn tiny native-btn ghost";
-      btn2.textContent = "浏览器打开";
-      btn2.title = "用浏览器自带阅读器查看（可截图，但金额需手填）";
-      btn2.onclick = (e) => {
-        e.stopPropagation();
-        openInNativeViewer(it.srcBlob, it.name + ".pdf");
-      };
-
-      btns.append(btn1, btn2);
-      warn.append(txt, btns);
+      warn.append(txt, btn);
       card.appendChild(warn);
     }
 
@@ -522,17 +502,6 @@ function collectSpec() {
   if (!items.length) return null;
 
   // 有票面不完整的发票时，拦下来避免打印出空票去报销
-  const broken = items.filter((i) => i.needsNative);
-  if (broken.length) {
-    const names = broken.slice(0, 3).map((i) => i.name).join("、");
-    const err = new Error(
-      `有 ${broken.length} 张高铁票（${names}${broken.length > 3 ? " 等" : ""}）在网页版无法显示票面文字。` +
-      `请用本机版处理这些票：bash ~/发票打印/启动发票拼版.sh`
-    );
-    err.isGuide = true;
-    throw err;
-  }
-
   const nPages = Math.max(...items.map((i) => i.page)) + 1;
   const pages = [];
   for (let p = 0; p < nPages; p++) {
@@ -614,7 +583,7 @@ async function exportImages(btn) {
 
 /* ================= 提示 ================= */
 
-/** 展示高铁票处理指引弹窗 */
+/** 展示本机版说明（仅高铁票需要） */
 function showGuide() {
   let dlg = $("#guideDlg");
   if (!dlg) {
@@ -623,10 +592,15 @@ function showGuide() {
     dlg.className = "guide-dlg";
     dlg.innerHTML = `
       <div class="guide-box">
-        <h3>${GUIDE_TEXT.title}</h3>
-        <p class="guide-reason">${GUIDE_TEXT.reason}</p>
-        <ol class="guide-steps">${GUIDE_TEXT.steps.map((s) => `<li>${s}</li>`).join("")}</ol>
-        <div class="guide-actions"><button class="btn" id="guideClose">知道了</button></div>
+        <h3>高铁票请用本机版</h3>
+        <p class="guide-reason">
+          网页版受浏览器技术限制，高铁票的中文（站名等）无法完整显示，
+          但<b>金额、日期、车次、二维码都已正常显示</b>，可直接用于报销。
+          需要完整票面时用本机版处理。
+        </p>
+        <div class="guide-cmd">bash ~/发票打印/启动发票拼版.sh</div>
+        <p class="guide-note">本机版能 100% 还原票面，金额也自动识别。</p>
+        <div class="guide-actions"><button class="btn primary" id="guideClose">知道了</button></div>
       </div>`;
     document.body.appendChild(dlg);
     dlg.addEventListener("click", (e) => {
@@ -726,7 +700,7 @@ function bindControls() {
 }
 
 // 前端版本标记（供 index.html 版本自检使用）
-window.__FP_VER = "v2.1";
+window.__FP_VER = "v3.0";
 
 bindControls();
 if (state.params.sidebarW) {

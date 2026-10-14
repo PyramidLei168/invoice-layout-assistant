@@ -8,10 +8,26 @@
 import * as pdfjsLib from "./vendor/pdf.min.mjs";
 import { initPdfJs } from "./fontsetup.js";
 import { extractAmount, textFromItems } from "./amount.js";
+import { renderPdfWithPdfium, initPdfium } from "./render.js";
 
-// 必须先初始化：加载 CMap 与标准字体，否则中文 PDF（尤其未内嵌字体的
-// 铁路电子客票）无法解码，渲染出来是一张没有文字的空白票
+// 必须先初始化：加载 CMap 与标准字体，否则部分中文 PDF 兼容性会下降
 initPdfJs();
+
+/** pdfium 是否可用（高铁票必须靠它） */
+let pdfiumOK = null;
+async function hasPdfium() {
+  if (pdfiumOK === null) {
+    try {
+      // 真正初始化 WASM 引擎（不拿假数据试探）
+      await initPdfium();
+      pdfiumOK = true;
+    } catch (e) {
+      console.warn("pdfium 初始化失败，将使用 pdf.js:", e);
+      pdfiumOK = false;
+    }
+  }
+  return pdfiumOK;
+}
 
 /** 把 PDF 的第 pageNo 页渲染成 PNG blob */
 async function renderPage(pdf, pageNo, dpi) {
@@ -75,6 +91,84 @@ function blobToFile(blob, name) {
   return new File([blob], name, { type: blob.type });
 }
 
+/**
+ * 用 pdfium 渲染票面 + pdf.js 提取金额。
+ *
+ * 分工：pdfium（Chrome 同款引擎）能把高铁票那种「未内嵌字体」的 PDF
+ * 渲染完整；pdf.js 在文字层完好时能准确提取文字用于识别金额。
+ * 两者组合，既保证票面完整，又能自动填金额。
+ */
+async function convertByPdfium(file, bytes, dpi, wantAmount) {
+  const pages = await renderPdfWithPdfium(new Uint8Array(bytes), dpi);
+
+  // 用 pdf.js 单独提取文字层（只取第一页，多页发票金额通常在首页）
+  let amount = null;
+  let amountSource = "";
+  if (wantAmount) {
+    try {
+      const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
+      try {
+        const r = await amountOfPage(pdf, 1);
+        amount = r.amount;
+        amountSource = r.source;
+      } finally {
+        await pdf.destroy();
+      }
+    } catch (e) {
+      console.warn("文字提取失败:", e);
+    }
+  }
+
+  return pages.map((p, i) => ({
+    url: URL.createObjectURL(p.blob),
+    blob: p.blob,
+    w: p.w,
+    h: p.h,
+    rot: 0,
+    amount: i === 0 ? amount : null,
+    amountSource: i === 0 ? amountSource : "",
+    needsNative: false,
+  }));
+}
+
+/** 用 pdf.js 处理（pdfium 不可用时的回退） */
+async function convertByPdfjs(file, bytes, dpi, wantAmount) {
+  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+  const out = [];
+  try {
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const blob = await renderPage(pdf, i, dpi);
+      const img = await createImageBitmap(blob);
+      const w = img.width;
+      const h = img.height;
+      img.close?.();
+
+      let amount = null;
+      let amountSource = "";
+      if (wantAmount) {
+        const r = await amountOfPage(pdf, i);
+        amount = r.amount;
+        amountSource = r.source;
+      }
+      const readable = await isTextReadable(pdf, i);
+
+      out.push({
+        url: URL.createObjectURL(blob),
+        blob,
+        w,
+        h,
+        rot: 0,
+        amount,
+        amountSource,
+        needsNative: !readable,
+      });
+    }
+  } finally {
+    await pdf.destroy();
+  }
+  return out;
+}
+
 /** 单个文件（PDF / 图片）→ 一组页面项 */
 export async function convertFile(file, { dpi = 200, wantAmount = true } = {}) {
   const isPdf =
@@ -95,44 +189,22 @@ export async function convertFile(file, { dpi = 200, wantAmount = true } = {}) {
         rot: 0,
         amount: null,
         amountSource: "图片",
+        needsNative: false,
       },
     ];
   }
 
-  const buf = await file.arrayBuffer();
-  const pdf = await pdfjsLib.getDocument({ data: buf }).promise;
-  const out = [];
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const blob = await renderPage(pdf, i, dpi);
-    const img = await createImageBitmap(blob);
-    const w = img.width;
-    const h = img.height;
-    img.close?.();
+  const bytes = await file.arrayBuffer();
 
-    let amount = null;
-    let amountSource = "";
-    if (wantAmount) {
-      const r = await amountOfPage(pdf, i);
-      amount = r.amount;
-      amountSource = r.source;
+  // 优先 pdfium：兼容性好，高铁票也能完整渲染
+  if (await hasPdfium()) {
+    try {
+      return await convertByPdfium(file, bytes, dpi, wantAmount);
+    } catch (e) {
+      console.warn("pdfium 渲染失败，回退 pdf.js:", e);
     }
-
-    // 文字层不可读 → 标记出来，交给界面提示用户用浏览器原生查看器
-    const readable = await isTextReadable(pdf, i);
-
-    out.push({
-      url: URL.createObjectURL(blob),
-      blob,
-      w,
-      h,
-      rot: 0,
-      amount,
-      amountSource,
-      needsNative: !readable,
-    });
   }
-  await pdf.destroy();
-  return out;
+  return convertByPdfjs(file, bytes, dpi, wantAmount);
 }
 
 /** 自然排序：27.pdf 排在 28.pdf 前面，而不是 27 在 8 前面 */

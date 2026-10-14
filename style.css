@@ -245,6 +245,23 @@ body {
   color: #475569;
 }
 
+.guide-cmd {
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 10px 12px;
+  font-family: monospace;
+  font-size: 12.5px;
+  color: #0f172a;
+  margin: 0 0 10px;
+  user-select: all;
+}
+
+.guide-note {
+  margin: 0 0 14px;
+  font-size: 12.5px;
+  color: #64748b;
+}
+
 .guide-steps {
   margin: 0 0 18px;
   padding-left: 20px;
@@ -255,89 +272,48 @@ body {
 
 .guide-actions { text-align: right; }
 
-/* 文字无法解析的票（如铁路电子客票）——给出醒目标记与操作入口 */
+
+/* 高铁票提示（轻量，不打扰） */
 .native-hint {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
   margin: 0 8px 8px;
-  padding: 6px 8px;
-  border-radius: 6px;
-  background: #fef3c7;
-  border-left: 3px solid #f59e0b;
+  padding: 4px 8px;
+  border-radius: 5px;
+  background: #fffbeb;
+  border-left: 3px solid #fbbf24;
   color: #92400e;
+  font-size: 11px;
 }
 
-.native-text {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  min-width: 0;
-}
-
-.native-text strong {
-  font-size: 11.5px;
-  line-height: 1.3;
-}
-
-.native-text span {
-  font-size: 10.5px;
-  line-height: 1.3;
-  opacity: .85;
-}
+.native-text { min-width: 0; }
 
 .native-btn {
   flex: none;
-  background: #b45309;
-  border-color: #b45309;
+  background: #f59e0b;
+  border-color: #f59e0b;
   color: #fff;
-  padding: 4px 8px;
+  padding: 2px 7px;
   font-size: 11px;
   white-space: nowrap;
 }
 
-.native-btn:hover {
-  background: #92400e;
-  border-color: #92400e;
-}
+.native-btn:hover { background: #d97706; border-color: #d97706; }
 
-.native-btns {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: none;
-}
-
-.native-btn.ghost {
-  background: transparent;
-  color: #92400e;
-  border: 1px solid #d97706;
-}
-
-.native-btn.ghost:hover {
-  background: #fef3c7;
-}
-
-.item-warn::after {
-  border-color: #f59e0b !important;
-}
+.item-warn::after { border-color: #fbbf24 !important; }
 
 .item-warn .warn-mark {
   position: absolute;
-  top: 2px;
-  left: 2px;
-  width: 18px;
-  height: 18px;
+  top: 2px; left: 2px;
+  width: 16px; height: 16px;
   border-radius: 50%;
   background: #f59e0b;
   color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  line-height: 18px;
-  text-align: center;
+  font-size: 11px; font-weight: 700;
+  line-height: 16px; text-align: center;
   pointer-events: none;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
 }
 
 /* 自动识别出的金额：绿色边框提示，人工改过后变为普通样式 */
