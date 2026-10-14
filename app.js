@@ -227,19 +227,26 @@ function renderLibrary() {
     sub.append(badge, rm);
     meta.append(name, sub);
 
-    // 文字层不可读的票（铁路电子客票等）：给出浏览器原生查看器的入口
+    // 文字层不可读的票（铁路电子客票等）：票面渲染不完整，必须引导用户处理
     if (it.needsNative && it.srcBlob) {
       const warn = document.createElement("div");
       warn.className = "native-hint";
-      const txt = document.createElement("span");
-      txt.textContent = "⚠ 文字无法解析";
+      const txt = document.createElement("div");
+      txt.className = "native-text";
+      const t1 = document.createElement("strong");
+      t1.textContent = "⚠ 这张票面文字未显示";
+      const t2 = document.createElement("span");
+      t2.textContent = "点击右侧按钮用浏览器打开，另存为图片后拖回本页";
+      txt.append(t1, t2);
+
       const btn = document.createElement("button");
       btn.className = "btn tiny native-btn";
       btn.textContent = "浏览器打开";
-      btn.title = "在新标签页用浏览器自带的 PDF 阅读器打开（能正常显示），再截图或另存为图片拖回来";
+      btn.title = "在新标签页用浏览器自带的 PDF 阅读器打开（能正常显示）";
       btn.onclick = (e) => {
         e.stopPropagation();
         openInNativeViewer(it.srcBlob, it.name + ".pdf");
+        toast("已在新标签页打开，请截图或另存为图片后拖回本页");
       };
       warn.append(txt, btn);
       card.appendChild(warn);
@@ -252,10 +259,11 @@ function renderLibrary() {
     priceInput.min = "0";
     priceInput.step = "0.01";
     priceInput.className = "price-input" + (it.auto ? " auto" : "");
-    const NO_TEXT_HINT = "铁路票等格式无法自动识别，请手填";
-    priceInput.placeholder =
-      it.amountSource === "无文字层" || it.amountSource === "未识别"
-        ? NO_TEXT_HINT
+    // 文字层不可读的票：优先引导用浏览器打开，其次才提示手填
+    priceInput.placeholder = it.needsNative
+      ? "票面文字未解析 · 请手填"
+      : it.amountSource === "无文字层" || it.amountSource === "未识别"
+        ? "无法自动识别，请手填"
         : it.amountSource && !["图片", "识别失败"].includes(it.amountSource)
           ? `自动: ${it.amountSource}`
           : "金额 ¥";
@@ -499,6 +507,17 @@ function rotateItem(it) {
 function collectSpec() {
   const items = state.items.filter((i) => i.inLayout);
   if (!items.length) return null;
+
+  // 有票面不完整的发票时，拦下来提醒先处理，避免打印出残缺票面
+  const broken = items.filter((i) => i.needsNative);
+  if (broken.length) {
+    const names = broken.slice(0, 3).map((i) => i.name).join("、");
+    throw new Error(
+      `有 ${broken.length} 张高铁票的票面文字未显示（${names}${broken.length > 3 ? " 等" : ""}）。` +
+      `请先用左侧「浏览器打开」另存为图片后拖回，再导出。`
+    );
+  }
+
   const nPages = Math.max(...items.map((i) => i.page)) + 1;
   const pages = [];
   for (let p = 0; p < nPages; p++) {
@@ -528,7 +547,12 @@ function download(blob, filename) {
 }
 
 async function exportDocx(btn) {
-  const spec = collectSpec();
+  let spec;
+  try {
+    spec = collectSpec();
+  } catch (e) {
+    return toast(e.message);
+  }
   if (!spec) return toast("还没有排版内容，请先拖入发票");
   const old = btn.textContent;
   btn.disabled = true;
@@ -546,7 +570,12 @@ async function exportDocx(btn) {
 }
 
 async function exportImages(btn) {
-  const spec = collectSpec();
+  let spec;
+  try {
+    spec = collectSpec();
+  } catch (e) {
+    return toast(e.message);
+  }
   if (!spec) return toast("还没有排版内容，请先拖入发票");
   const old = btn.textContent;
   btn.disabled = true;
@@ -576,14 +605,17 @@ function setBusy(on, text) {
 }
 
 let toastTimer = null;
-function toast(msg) {
-  $("#status").textContent = msg;
-  $("#status").style.color = "#2563eb";
+function toast(msg, ms = 5000) {
+  const st = $("#status");
+  st.textContent = msg;
+  st.style.color = "#dc2626";
+  st.title = msg;
   clearTimeout(toastTimer);
   toastTimer = setTimeout(() => {
-    $("#status").style.color = "";
+    st.style.color = "";
+    st.title = "";
     renderStatus();
-  }, 5000);
+  }, ms);
 }
 
 /* ================= 控件 ================= */
@@ -641,9 +673,17 @@ function bindControls() {
   $("#btnExportImg").onclick = (e) => exportImages(e.currentTarget);
   $("#btnPrint").onclick = () => {
     if (!state.items.some((i) => i.inLayout)) return toast("还没有排版内容，请先拖入发票");
+    try {
+      collectSpec();
+    } catch (e) {
+      return toast(e.message);
+    }
     window.print();
   };
 }
+
+// 前端版本标记（供 index.html 版本自检使用）
+window.__FP_VER = "v2.0";
 
 bindControls();
 if (state.params.sidebarW) {

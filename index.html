@@ -110,6 +110,17 @@
 </div>
 
 <script src="vendor/jszip.min.js"></script>
-<script type="module" src="app.js"></script>
+<script>
+// 版本自检：防止浏览器缓存了旧版 JS
+// 与服务端 PDF 无关，纯前端版本标记；发现不匹配就强制刷新一次
+(function () {
+  var EXPECTED = "v2.0";
+  if (window.__FP_VER === EXPECTED) return;
+  if (sessionStorage.getItem("fp_ver_checked") === EXPECTED) return;
+  sessionStorage.setItem("fp_ver_checked", EXPECTED);
+  location.reload(true);
+})();
+</script>
+<script type="module" src="app.js?v2"></script>
 </body>
 </html>
