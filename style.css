@@ -212,6 +212,56 @@ body {
   border-color: var(--primary);
 }
 
+/* 文字无法解析的票（如铁路电子客票）——给出醒目标记与操作入口 */
+.native-hint {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin: 0 8px 8px;
+  padding: 5px 8px;
+  border-radius: 6px;
+  background: #fef3c7;
+  color: #92400e;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
+.native-btn {
+  flex: none;
+  background: #b45309;
+  border-color: #b45309;
+  color: #fff;
+  padding: 2px 8px;
+  font-size: 11px;
+}
+
+.native-btn:hover {
+  background: #92400e;
+  border-color: #92400e;
+}
+
+.item-warn::after {
+  border-color: #f59e0b !important;
+}
+
+.item-warn .warn-mark {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #f59e0b;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 18px;
+  text-align: center;
+  pointer-events: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, .3);
+}
+
 /* 自动识别出的金额：绿色边框提示，人工改过后变为普通样式 */
 .price-input.auto {
   border-color: #34d399;

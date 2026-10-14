@@ -6,12 +6,12 @@
  */
 
 import * as pdfjsLib from "./vendor/pdf.min.mjs";
+import { initPdfJs } from "./fontsetup.js";
 import { extractAmount, textFromItems } from "./amount.js";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = new URL(
-  "./vendor/pdf.worker.min.mjs",
-  import.meta.url
-).href;
+// 必须先初始化：加载 CMap 与标准字体，否则中文 PDF（尤其未内嵌字体的
+// 铁路电子客票）无法解码，渲染出来是一张没有文字的空白票
+initPdfJs();
 
 /** 把 PDF 的第 pageNo 页渲染成 PNG blob */
 async function renderPage(pdf, pageNo, dpi) {
@@ -52,6 +52,22 @@ async function amountOfPage(pdf, pageNo) {
     return extractAmount(text);
   } catch {
     return { amount: null, source: "无文字层" };
+  }
+}
+
+/**
+ * 判断某页文字层是否可读。
+ * 铁路电子客票等 PDF 未内嵌字体，pdf.js 只能读到极少数文字块，
+ * 渲染出来的票是「只有印章和二维码、没有文字」的样子。
+ * 这类票需要用浏览器自带的 PDF 阅读器打开。
+ */
+async function isTextReadable(pdf, pageNo) {
+  try {
+    const page = await pdf.getPage(pageNo);
+    const tc = await page.getTextContent();
+    return tc.items.length >= 5;
+  } catch {
+    return false;
   }
 }
 
@@ -101,6 +117,9 @@ export async function convertFile(file, { dpi = 200, wantAmount = true } = {}) {
       amountSource = r.source;
     }
 
+    // 文字层不可读 → 标记出来，交给界面提示用户用浏览器原生查看器
+    const readable = await isTextReadable(pdf, i);
+
     out.push({
       url: URL.createObjectURL(blob),
       blob,
@@ -109,6 +128,7 @@ export async function convertFile(file, { dpi = 200, wantAmount = true } = {}) {
       rot: 0,
       amount,
       amountSource,
+      needsNative: !readable,
     });
   }
   await pdf.destroy();

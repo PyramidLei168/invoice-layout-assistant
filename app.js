@@ -8,6 +8,7 @@
 import { convertFiles } from "./pdf.js";
 import { buildDocx } from "./docx.js";
 import { renderPagesToBlobs, packZip } from "./export.js";
+import { openInNativeViewer, GUIDE_TEXT } from "./native.js";
 
 const $ = (s) => document.querySelector(s);
 const PW = 21, PH = 29.7;                 // A4（厘米）
@@ -107,8 +108,10 @@ function renderStatus() {
   if (inLay.length) {
     const autoN = inLay.filter((i) => i.auto).length;
     const missN = inLay.filter((i) => !(Number(i.price) > 0)).length;
+    const nativeN = inLay.filter((i) => i.needsNative).length;
     text += ` ｜ 自动识别 ${autoN}`;
     if (missN > 0) text += `，${missN} 张待填`;
+    if (nativeN > 0) text += `，${nativeN} 张需另存为图片`;
   }
   $("#status").textContent = text;
 }
@@ -144,8 +147,11 @@ function renderPages() {
 function itemEl(it) {
   const d = document.createElement("div");
   d.className = "item" + (state.sel === it.id ? " sel" : "");
+  if (it.needsNative) d.classList.add("item-warn");
   d.dataset.id = it.id;
-  d.title = it.name;
+  d.title = it.needsNative
+    ? `${it.name}\n（这张票的文字无法解析，请用左侧的「用浏览器打开」另存为图片）`
+    : it.name;
   placeStyle(d, it);
 
   const img = document.createElement("img");
@@ -153,6 +159,14 @@ function itemEl(it) {
   img.alt = it.name;
   img.draggable = false;
   d.appendChild(img);
+
+  // 文字解析失败的票加个角标
+  if (it.needsNative) {
+    const mark = document.createElement("span");
+    mark.className = "warn-mark";
+    mark.textContent = "!";
+    d.appendChild(mark);
+  }
 
   const handle = document.createElement("div");
   handle.className = "handle";
@@ -212,6 +226,24 @@ function renderLibrary() {
     };
     sub.append(badge, rm);
     meta.append(name, sub);
+
+    // 文字层不可读的票（铁路电子客票等）：给出浏览器原生查看器的入口
+    if (it.needsNative && it.srcBlob) {
+      const warn = document.createElement("div");
+      warn.className = "native-hint";
+      const txt = document.createElement("span");
+      txt.textContent = "⚠ 文字无法解析";
+      const btn = document.createElement("button");
+      btn.className = "btn tiny native-btn";
+      btn.textContent = "浏览器打开";
+      btn.title = "在新标签页用浏览器自带的 PDF 阅读器打开（能正常显示），再截图或另存为图片拖回来";
+      btn.onclick = (e) => {
+        e.stopPropagation();
+        openInNativeViewer(it.srcBlob, it.name + ".pdf");
+      };
+      warn.append(txt, btn);
+      card.appendChild(warn);
+    }
 
     const priceRow = document.createElement("div");
     priceRow.className = "price-row";
@@ -320,6 +352,9 @@ async function addFiles(fileList) {
             name: r.files.length > 1 || src.pages.length > 1 ? `${base}（第${k + 1}页）` : base,
             url: pg.url, blob: pg.blob, nw: pg.w, nh: pg.h,
             price: amt, amountSource: pg.amountSource || "", auto: amt > 0,
+            // 文字层不可读的票（铁路电子客票等）需要另存为图片
+            needsNative: !!pg.needsNative,
+            srcBlob: /\.pdf$/i.test(src.name) ? f : null,
             rot: 0, inLayout: true,
           });
           added++;
