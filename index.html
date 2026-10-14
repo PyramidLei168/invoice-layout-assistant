@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>发票拼版助手 · 开源免费版</title>
+<meta name="description" content="出差报销发票批量拼版：PDF 自动转图片、统一缩放到 A4、金额自动识别、导出 Word 打印。纯本地处理，数据不上传。">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+</head>
+<body>
+
+<div id="dropOverlay" class="drop-overlay" hidden>
+  <div class="drop-box">松开鼠标，把发票加进来<br><small>支持 PDF、图片、zip，以及整个文件夹</small></div>
+</div>
+
+<header class="topbar">
+  <div class="brand">发票拼版助手</div>
+
+  <div class="toolbar">
+    <button id="btnAdd" class="btn primary">＋ 添加发票</button>
+    <input type="file" id="fileInput" multiple hidden
+           accept=".pdf,.png,.jpg,.jpeg,.webp,.bmp,.gif,.tif,.tiff,.zip">
+
+    <span class="sep"></span>
+
+    <label class="ctl">统一宽度
+      <input type="range" id="uniWidth" min="3" max="17" step="0.5" value="9">
+      <b id="uniWidthVal">9 cm</b>
+    </label>
+
+    <label class="ctl">列数
+      <select id="cols">
+        <option value="0">自动</option>
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+      </select>
+    </label>
+
+    <label class="ctl">间距
+      <input type="range" id="gap" min="0" max="2" step="0.1" value="0.4">
+      <b id="gapVal">0.4</b>
+    </label>
+
+    <label class="ctl">边距
+      <input type="range" id="margin" min="0.4" max="3" step="0.1" value="1.2">
+      <b id="marginVal">1.2</b>
+    </label>
+
+    <button id="btnRelayout" class="btn">↻ 自动排版</button>
+
+    <span class="sep"></span>
+
+    <button id="btnRotate" class="btn" title="选中发票后按 R 也可旋转">⟳ 旋转</button>
+    <button id="btnDelete" class="btn" title="选中发票后按 Delete 移出排版">✕ 移出排版</button>
+
+    <span class="sep"></span>
+
+    <label class="ctl chk" title="拖入时自动从发票文字层识别金额">
+      <input type="checkbox" id="autoAmt" checked> 自动识别金额
+    </label>
+
+    <label class="ctl">精度
+      <select id="dpi" title="转换清晰度，越高越清晰、越慢">
+        <option value="150">150</option>
+        <option value="200" selected>200</option>
+        <option value="300">300</option>
+      </select>
+    </label>
+
+    <button id="btnExportDocx" class="btn success">导出 Word</button>
+    <button id="btnExportImg" class="btn">导出图片</button>
+    <button id="btnPrint" class="btn">打印</button>
+  </div>
+</header>
+
+<main class="layout">
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-head">
+      <h3>票据库 <span id="libCount" class="count">0</span></h3>
+      <button id="btnClearLib" class="btn tiny ghost" title="清空票据库和排版">清空</button>
+    </div>
+    <div id="library" class="library"></div>
+    <div id="libEmpty" class="lib-empty">拖入的发票会先出现在这里，<br>并自动排到右边的 A4 页面上。</div>
+  </aside>
+
+  <div id="divider" class="divider" title="拖动调整左右宽度"></div>
+
+  <section class="workspace" id="workspace">
+    <div id="empty" class="empty">
+      <div class="empty-icon">PDF</div>
+      <p>把发票 <b>PDF / 图片 / zip</b> 拖到这里</p>
+      <p class="sub">高铁票、飞机票、出租车、滴滴行程单……全部自动转成图片，<br>
+         统一缩放到 A4 页面上，导出 Word 或直接打印，方便报销粘贴。</p>
+      <p class="sub">也支持把整个发票文件夹拖进来。</p>
+      <p class="sub privacy">🔒 所有处理都在你的浏览器里完成，发票不会上传到任何服务器</p>
+    </div>
+    <div id="pages" class="pages"></div>
+  </section>
+</main>
+
+<footer class="statusbar">
+  <span id="status">就绪</span>
+  <span id="hint">拖动中间竖条调宽度 · 单击选中 · 拖动移动 · 右下角缩放 · R 旋转 · Delete 移出</span>
+</footer>
+
+<div id="busy" class="busy" hidden>
+  <div class="busy-box"><span class="spin"></span><span id="busyText">正在处理…</span></div>
+</div>
+
+<script src="vendor/jszip.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>
