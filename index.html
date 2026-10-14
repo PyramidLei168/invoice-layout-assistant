@@ -112,15 +112,16 @@
 <script src="vendor/jszip.min.js"></script>
 <script>
 // 版本自检：防止浏览器缓存了旧版 JS
-// 与服务端 PDF 无关，纯前端版本标记；发现不匹配就强制刷新一次
-(function () {
-  var EXPECTED = "v3.0";
-  if (window.__FP_VER === EXPECTED) return;
-  if (sessionStorage.getItem("fp_ver_checked") === EXPECTED) return;
-  sessionStorage.setItem("fp_ver_checked", EXPECTED);
-  location.reload(true);
-})();
+// 注意：必须在 app.js 加载完成后再判断，否则会误判并无限刷新。
+window.addEventListener("load", function () {
+  var EXPECTED = "v3.1";
+  if (window.__FP_VER === EXPECTED) return;          // 已是最新，正常使用
+  var KEY = "fp_ver_" + EXPECTED;
+  if (sessionStorage.getItem(KEY)) return;            // 本次会话已刷新过，别再刷
+  sessionStorage.setItem(KEY, "1");
+  location.reload();                                   // 仅刷新一次
+});
 </script>
-<script type="module" src="app.js?v30"></script>
+<script type="module" src="app.js?v31"></script>
 </body>
 </html>

@@ -700,7 +700,7 @@ function bindControls() {
 }
 
 // 前端版本标记（供 index.html 版本自检使用）
-window.__FP_VER = "v3.0";
+window.__FP_VER = "v3.1";
 
 bindControls();
 if (state.params.sidebarW) {
