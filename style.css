@@ -212,6 +212,49 @@ body {
   border-color: var(--primary);
 }
 
+/* 高铁票处理指引弹窗 */
+.guide-dlg {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(15, 23, 42, .45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.guide-box {
+  background: #fff;
+  border-radius: 12px;
+  padding: 22px 24px;
+  max-width: 460px;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, .25);
+}
+
+.guide-box h3 {
+  margin: 0 0 10px;
+  font-size: 17px;
+  color: #92400e;
+}
+
+.guide-reason {
+  margin: 0 0 12px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: #475569;
+}
+
+.guide-steps {
+  margin: 0 0 18px;
+  padding-left: 20px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: #1f2937;
+}
+
+.guide-actions { text-align: right; }
+
 /* 文字无法解析的票（如铁路电子客票）——给出醒目标记与操作入口 */
 .native-hint {
   display: flex;
@@ -257,6 +300,23 @@ body {
 .native-btn:hover {
   background: #92400e;
   border-color: #92400e;
+}
+
+.native-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: none;
+}
+
+.native-btn.ghost {
+  background: transparent;
+  color: #92400e;
+  border: 1px solid #d97706;
+}
+
+.native-btn.ghost:hover {
+  background: #fef3c7;
 }
 
 .item-warn::after {

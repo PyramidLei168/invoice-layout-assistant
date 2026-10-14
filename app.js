@@ -111,7 +111,7 @@ function renderStatus() {
     const nativeN = inLay.filter((i) => i.needsNative).length;
     text += ` ｜ 自动识别 ${autoN}`;
     if (missN > 0) text += `，${missN} 张待填`;
-    if (nativeN > 0) text += `，${nativeN} 张需另存为图片`;
+    if (nativeN > 0) text += `，${nativeN} 张高铁票请用本机版`;
   }
   $("#status").textContent = text;
 }
@@ -227,28 +227,41 @@ function renderLibrary() {
     sub.append(badge, rm);
     meta.append(name, sub);
 
-    // 文字层不可读的票（铁路电子客票等）：票面渲染不完整，必须引导用户处理
+    // 文字层不可读的票（铁路电子客票等）：引导到本机版处理
     if (it.needsNative && it.srcBlob) {
       const warn = document.createElement("div");
       warn.className = "native-hint";
       const txt = document.createElement("div");
       txt.className = "native-text";
       const t1 = document.createElement("strong");
-      t1.textContent = "⚠ 这张票面文字未显示";
+      t1.textContent = "⚠ 高铁票：本机版可完整显示";
       const t2 = document.createElement("span");
-      t2.textContent = "点击右侧按钮用浏览器打开，另存为图片后拖回本页";
+      t2.textContent = "网页版无法渲染票面文字，请用本机版处理此票";
       txt.append(t1, t2);
 
-      const btn = document.createElement("button");
-      btn.className = "btn tiny native-btn";
-      btn.textContent = "浏览器打开";
-      btn.title = "在新标签页用浏览器自带的 PDF 阅读器打开（能正常显示）";
-      btn.onclick = (e) => {
+      const btns = document.createElement("div");
+      btns.className = "native-btns";
+
+      const btn1 = document.createElement("button");
+      btn1.className = "btn tiny native-btn";
+      btn1.textContent = "看怎么用";
+      btn1.title = GUIDE_TEXT.reason;
+      btn1.onclick = (e) => {
+        e.stopPropagation();
+        showGuide();
+      };
+
+      const btn2 = document.createElement("button");
+      btn2.className = "btn tiny native-btn ghost";
+      btn2.textContent = "浏览器打开";
+      btn2.title = "用浏览器自带阅读器查看（可截图，但金额需手填）";
+      btn2.onclick = (e) => {
         e.stopPropagation();
         openInNativeViewer(it.srcBlob, it.name + ".pdf");
-        toast("已在新标签页打开，请截图或另存为图片后拖回本页");
       };
-      warn.append(txt, btn);
+
+      btns.append(btn1, btn2);
+      warn.append(txt, btns);
       card.appendChild(warn);
     }
 
@@ -508,14 +521,16 @@ function collectSpec() {
   const items = state.items.filter((i) => i.inLayout);
   if (!items.length) return null;
 
-  // 有票面不完整的发票时，拦下来提醒先处理，避免打印出残缺票面
+  // 有票面不完整的发票时，拦下来避免打印出空票去报销
   const broken = items.filter((i) => i.needsNative);
   if (broken.length) {
     const names = broken.slice(0, 3).map((i) => i.name).join("、");
-    throw new Error(
-      `有 ${broken.length} 张高铁票的票面文字未显示（${names}${broken.length > 3 ? " 等" : ""}）。` +
-      `请先用左侧「浏览器打开」另存为图片后拖回，再导出。`
+    const err = new Error(
+      `有 ${broken.length} 张高铁票（${names}${broken.length > 3 ? " 等" : ""}）在网页版无法显示票面文字。` +
+      `请用本机版处理这些票：bash ~/发票打印/启动发票拼版.sh`
     );
+    err.isGuide = true;
+    throw err;
   }
 
   const nPages = Math.max(...items.map((i) => i.page)) + 1;
@@ -551,7 +566,9 @@ async function exportDocx(btn) {
   try {
     spec = collectSpec();
   } catch (e) {
-    return toast(e.message);
+    toast(e.message, 8000);
+    if (e.isGuide) showGuide();
+    return;
   }
   if (!spec) return toast("还没有排版内容，请先拖入发票");
   const old = btn.textContent;
@@ -574,7 +591,9 @@ async function exportImages(btn) {
   try {
     spec = collectSpec();
   } catch (e) {
-    return toast(e.message);
+    toast(e.message, 8000);
+    if (e.isGuide) showGuide();
+    return;
   }
   if (!spec) return toast("还没有排版内容，请先拖入发票");
   const old = btn.textContent;
@@ -594,6 +613,28 @@ async function exportImages(btn) {
 }
 
 /* ================= 提示 ================= */
+
+/** 展示高铁票处理指引弹窗 */
+function showGuide() {
+  let dlg = $("#guideDlg");
+  if (!dlg) {
+    dlg = document.createElement("div");
+    dlg.id = "guideDlg";
+    dlg.className = "guide-dlg";
+    dlg.innerHTML = `
+      <div class="guide-box">
+        <h3>${GUIDE_TEXT.title}</h3>
+        <p class="guide-reason">${GUIDE_TEXT.reason}</p>
+        <ol class="guide-steps">${GUIDE_TEXT.steps.map((s) => `<li>${s}</li>`).join("")}</ol>
+        <div class="guide-actions"><button class="btn" id="guideClose">知道了</button></div>
+      </div>`;
+    document.body.appendChild(dlg);
+    dlg.addEventListener("click", (e) => {
+      if (e.target === dlg || e.target.id === "guideClose") dlg.hidden = true;
+    });
+  }
+  dlg.hidden = false;
+}
 
 function setBusy(on, text) {
   if (on) {
@@ -676,14 +717,16 @@ function bindControls() {
     try {
       collectSpec();
     } catch (e) {
-      return toast(e.message);
+      toast(e.message, 8000);
+      if (e.isGuide) showGuide();
+      return;
     }
     window.print();
   };
 }
 
 // 前端版本标记（供 index.html 版本自检使用）
-window.__FP_VER = "v2.0";
+window.__FP_VER = "v2.1";
 
 bindControls();
 if (state.params.sidebarW) {
