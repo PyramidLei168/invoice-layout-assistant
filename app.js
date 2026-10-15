@@ -8,7 +8,6 @@
 import { convertFiles } from "./pdf.js";
 import { buildDocx } from "./docx.js";
 import { renderPagesToBlobs, packZip } from "./export.js";
-import { openInNativeViewer } from "./native.js";
 
 const $ = (s) => document.querySelector(s);
 const PW = 21, PH = 29.7;                 // A4（厘米）
@@ -108,10 +107,8 @@ function renderStatus() {
   if (inLay.length) {
     const autoN = inLay.filter((i) => i.auto).length;
     const missN = inLay.filter((i) => !(Number(i.price) > 0)).length;
-    const nativeN = inLay.filter((i) => i.needsNative).length;
     text += ` ｜ 自动识别 ${autoN}`;
     if (missN > 0) text += `，${missN} 张待填`;
-    if (nativeN > 0) text += `，${nativeN} 张高铁票请用本机版`;
   }
   $("#status").textContent = text;
 }
@@ -147,11 +144,8 @@ function renderPages() {
 function itemEl(it) {
   const d = document.createElement("div");
   d.className = "item" + (state.sel === it.id ? " sel" : "");
-  if (it.needsNative) d.classList.add("item-warn");
   d.dataset.id = it.id;
-  d.title = it.needsNative
-    ? `${it.name}\n（这张票的文字无法解析，请用左侧的「用浏览器打开」另存为图片）`
-    : it.name;
+  d.title = it.name;
   placeStyle(d, it);
 
   const img = document.createElement("img");
@@ -159,14 +153,6 @@ function itemEl(it) {
   img.alt = it.name;
   img.draggable = false;
   d.appendChild(img);
-
-  // 文字解析失败的票加个角标
-  if (it.needsNative) {
-    const mark = document.createElement("span");
-    mark.className = "warn-mark";
-    mark.textContent = "!";
-    d.appendChild(mark);
-  }
 
   const handle = document.createElement("div");
   handle.className = "handle";
@@ -227,24 +213,6 @@ function renderLibrary() {
     sub.append(badge, rm);
     meta.append(name, sub);
 
-    // 票面文字渲染不全时，提示可切换到本机版（仅一次点击，不打断流程）
-    if (it.needsNative) {
-      const warn = document.createElement("div");
-      warn.className = "native-hint";
-      const txt = document.createElement("span");
-      txt.className = "native-text";
-      txt.textContent = "站名等汉字需本机版显示";
-      const btn = document.createElement("button");
-      btn.className = "btn tiny native-btn";
-      btn.textContent = "本机版说明";
-      btn.onclick = (e) => {
-        e.stopPropagation();
-        showGuide();
-      };
-      warn.append(txt, btn);
-      card.appendChild(warn);
-    }
-
     const priceRow = document.createElement("div");
     priceRow.className = "price-row";
     const priceInput = document.createElement("input");
@@ -252,10 +220,8 @@ function renderLibrary() {
     priceInput.min = "0";
     priceInput.step = "0.01";
     priceInput.className = "price-input" + (it.auto ? " auto" : "");
-    // 文字层不可读的票：优先引导用浏览器打开，其次才提示手填
-    priceInput.placeholder = it.needsNative
-      ? "票面文字未解析 · 请手填"
-      : it.amountSource === "无文字层" || it.amountSource === "未识别"
+    priceInput.placeholder =
+      it.amountSource === "无文字层" || it.amountSource === "未识别"
         ? "无法自动识别，请手填"
         : it.amountSource && !["图片", "识别失败"].includes(it.amountSource)
           ? `自动: ${it.amountSource}`
@@ -353,8 +319,6 @@ async function addFiles(fileList) {
             name: r.files.length > 1 || src.pages.length > 1 ? `${base}（第${k + 1}页）` : base,
             url: pg.url, blob: pg.blob, nw: pg.w, nh: pg.h,
             price: amt, amountSource: pg.amountSource || "", auto: amt > 0,
-            // 文字层不可读的票（铁路电子客票等）需要另存为图片
-            needsNative: !!pg.needsNative,
             srcBlob: /\.pdf$/i.test(src.name) ? f : null,
             rot: 0, inLayout: true,
           });
@@ -536,7 +500,6 @@ async function exportDocx(btn) {
     spec = collectSpec();
   } catch (e) {
     toast(e.message, 8000);
-    if (e.isGuide) showGuide();
     return;
   }
   if (!spec) return toast("还没有排版内容，请先拖入发票");
@@ -561,7 +524,6 @@ async function exportImages(btn) {
     spec = collectSpec();
   } catch (e) {
     toast(e.message, 8000);
-    if (e.isGuide) showGuide();
     return;
   }
   if (!spec) return toast("还没有排版内容，请先拖入发票");
@@ -582,33 +544,6 @@ async function exportImages(btn) {
 }
 
 /* ================= 提示 ================= */
-
-/** 展示本机版说明（仅高铁票需要） */
-function showGuide() {
-  let dlg = $("#guideDlg");
-  if (!dlg) {
-    dlg = document.createElement("div");
-    dlg.id = "guideDlg";
-    dlg.className = "guide-dlg";
-    dlg.innerHTML = `
-      <div class="guide-box">
-        <h3>高铁票请用本机版</h3>
-        <p class="guide-reason">
-          网页版受浏览器技术限制，高铁票的中文（站名等）无法完整显示，
-          但<b>金额、日期、车次、二维码都已正常显示</b>，可直接用于报销。
-          需要完整票面时用本机版处理。
-        </p>
-        <div class="guide-cmd">bash ~/发票打印/启动发票拼版.sh</div>
-        <p class="guide-note">本机版能 100% 还原票面，金额也自动识别。</p>
-        <div class="guide-actions"><button class="btn primary" id="guideClose">知道了</button></div>
-      </div>`;
-    document.body.appendChild(dlg);
-    dlg.addEventListener("click", (e) => {
-      if (e.target === dlg || e.target.id === "guideClose") dlg.hidden = true;
-    });
-  }
-  dlg.hidden = false;
-}
 
 function setBusy(on, text) {
   if (on) {
@@ -692,7 +627,6 @@ function bindControls() {
       collectSpec();
     } catch (e) {
       toast(e.message, 8000);
-      if (e.isGuide) showGuide();
       return;
     }
     window.print();
@@ -700,7 +634,7 @@ function bindControls() {
 }
 
 // 前端版本标记（供 index.html 版本自检使用）
-window.__FP_VER = "v3.1";
+window.__FP_VER = "v4.0";
 
 bindControls();
 if (state.params.sidebarW) {

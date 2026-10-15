@@ -6,28 +6,11 @@
  */
 
 import * as pdfjsLib from "./vendor/pdf.min.mjs";
-import { initPdfJs } from "./fontsetup.js";
+import { initPdfJs, PDF_OPTS } from "./fontsetup.js";
 import { extractAmount, textFromItems } from "./amount.js";
-import { renderPdfWithPdfium, initPdfium } from "./render.js";
 
-// 必须先初始化：加载 CMap 与标准字体，否则部分中文 PDF 兼容性会下降
+// 必须先初始化：加载 CMap 与标准字体，否则中文票据会渲染成空白
 initPdfJs();
-
-/** pdfium 是否可用（高铁票必须靠它） */
-let pdfiumOK = null;
-async function hasPdfium() {
-  if (pdfiumOK === null) {
-    try {
-      // 真正初始化 WASM 引擎（不拿假数据试探）
-      await initPdfium();
-      pdfiumOK = true;
-    } catch (e) {
-      console.warn("pdfium 初始化失败，将使用 pdf.js:", e);
-      pdfiumOK = false;
-    }
-  }
-  return pdfiumOK;
-}
 
 /** 把 PDF 的第 pageNo 页渲染成 PNG blob */
 async function renderPage(pdf, pageNo, dpi) {
@@ -55,9 +38,8 @@ async function renderPage(pdf, pageNo, dpi) {
 /**
  * 取某页文字层并识别金额。
  *
- * 注意：部分铁路电子客票的 PDF 使用 GBK-EUC-H 编码且缺少 Unicode
- * 映射（ToUnicode），文字层无法解码（表现为「无文字层」）。这是格式
- * 限制，这类票需要用户手动填写金额。
+ * 配好 CMap 后，铁路电子客票那种 GBK-EUC-H 编码也能正常解码出文字，
+ * 因此高铁票的票价同样可以自动识别。
  */
 async function amountOfPage(pdf, pageNo) {
   try {
@@ -71,69 +53,14 @@ async function amountOfPage(pdf, pageNo) {
   }
 }
 
-/**
- * 判断某页文字层是否可读。
- * 铁路电子客票等 PDF 未内嵌字体，pdf.js 只能读到极少数文字块，
- * 渲染出来的票是「只有印章和二维码、没有文字」的样子。
- * 这类票需要用浏览器自带的 PDF 阅读器打开。
- */
-async function isTextReadable(pdf, pageNo) {
-  try {
-    const page = await pdf.getPage(pageNo);
-    const tc = await page.getTextContent();
-    return tc.items.length >= 5;
-  } catch {
-    return false;
-  }
-}
-
 function blobToFile(blob, name) {
   return new File([blob], name, { type: blob.type });
 }
 
-/**
- * 用 pdfium 渲染票面 + pdf.js 提取金额。
- *
- * 分工：pdfium（Chrome 同款引擎）能把高铁票那种「未内嵌字体」的 PDF
- * 渲染完整；pdf.js 在文字层完好时能准确提取文字用于识别金额。
- * 两者组合，既保证票面完整，又能自动填金额。
- */
-async function convertByPdfium(file, bytes, dpi, wantAmount) {
-  const pages = await renderPdfWithPdfium(new Uint8Array(bytes), dpi);
-
-  // 用 pdf.js 单独提取文字层（只取第一页，多页发票金额通常在首页）
-  let amount = null;
-  let amountSource = "";
-  if (wantAmount) {
-    try {
-      const pdf = await pdfjsLib.getDocument({ data: bytes.slice(0) }).promise;
-      try {
-        const r = await amountOfPage(pdf, 1);
-        amount = r.amount;
-        amountSource = r.source;
-      } finally {
-        await pdf.destroy();
-      }
-    } catch (e) {
-      console.warn("文字提取失败:", e);
-    }
-  }
-
-  return pages.map((p, i) => ({
-    url: URL.createObjectURL(p.blob),
-    blob: p.blob,
-    w: p.w,
-    h: p.h,
-    rot: 0,
-    amount: i === 0 ? amount : null,
-    amountSource: i === 0 ? amountSource : "",
-    needsNative: false,
-  }));
-}
-
-/** 用 pdf.js 处理（pdfium 不可用时的回退） */
-async function convertByPdfjs(file, bytes, dpi, wantAmount) {
-  const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+/** 用 pdf.js 渲染每一页 + 提取金额 */
+async function convertPdf(file, bytes, dpi, wantAmount) {
+  // PDF_OPTS 必须逐文档传入，挂在 GlobalWorkerOptions 上不生效
+  const pdf = await pdfjsLib.getDocument({ ...PDF_OPTS, data: bytes }).promise;
   const out = [];
   try {
     for (let i = 1; i <= pdf.numPages; i++) {
@@ -150,7 +77,6 @@ async function convertByPdfjs(file, bytes, dpi, wantAmount) {
         amount = r.amount;
         amountSource = r.source;
       }
-      const readable = await isTextReadable(pdf, i);
 
       out.push({
         url: URL.createObjectURL(blob),
@@ -160,7 +86,6 @@ async function convertByPdfjs(file, bytes, dpi, wantAmount) {
         rot: 0,
         amount,
         amountSource,
-        needsNative: !readable,
       });
     }
   } finally {
@@ -189,22 +114,12 @@ export async function convertFile(file, { dpi = 200, wantAmount = true } = {}) {
         rot: 0,
         amount: null,
         amountSource: "图片",
-        needsNative: false,
       },
     ];
   }
 
   const bytes = await file.arrayBuffer();
-
-  // 优先 pdfium：兼容性好，高铁票也能完整渲染
-  if (await hasPdfium()) {
-    try {
-      return await convertByPdfium(file, bytes, dpi, wantAmount);
-    } catch (e) {
-      console.warn("pdfium 渲染失败，回退 pdf.js:", e);
-    }
-  }
-  return convertByPdfjs(file, bytes, dpi, wantAmount);
+  return convertPdf(file, bytes, dpi, wantAmount);
 }
 
 /** 自然排序：27.pdf 排在 28.pdf 前面，而不是 27 在 8 前面 */
