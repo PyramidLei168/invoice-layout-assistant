@@ -5,6 +5,10 @@
 
 **完全免费 · 开源 · 纯本地处理 · 发票数据不上传任何服务器**
 
+| 在线使用 | 项目主页 |
+|---|---|
+| **[🚀 立即使用](https://pyramidlei168.github.io/invoice-layout-assistant/)** | **[⭐ 给个 Star](https://github.com/PyramidLei168/invoice-layout-assistant)** |
+
 ---
 
 ## ✨ 功能特性
@@ -103,3 +107,12 @@ A: 早期为了兼容铁路电子客票引入了 pdfium WASM，但实测它在�
 ## ⭐ Star 支持
 
 如果这个工具帮到你了，欢迎点个 ⭐ Star，你的支持是我持续维护的动力！
+
+**三步就能点：**
+
+1. 打开项目主页：<https://github.com/PyramidLei168/invoice-layout-assistant>
+2. 右上角点一下 **⭐ Star**（要点两次才会生效：先点后按钮会变成黄色）
+3. 完成 ✅
+
+> 💡 首次点需要登录 GitHub 账号，没有的话注册一个即可，免费。
+> ⭐ 只是收藏，不会收到任何邮件打扰。
